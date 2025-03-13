@@ -11,6 +11,20 @@ const hf = new HfInference(process.env.HUGGINGFACE_API_TOKEN || undefined);
 const ONLINE_MODEL = 'google/gemma-2b-it'; // Small but capable math model that works with free API
 const LOCAL_API_URL = 'http://localhost:11434/api/generate'; // Ollama API URL - default port
 
+// Define interface for axios response
+interface LocalApiResponse {
+  data: {
+    response: string;
+    [key: string]: any;
+  };
+}
+
+// Define interface for Hugging Face text generation response
+interface HfTextGenerationResponse {
+  generated_text: string;
+  [key: string]: any;
+}
+
 export async function POST(request: Request) {
   try {
     const { text, useLocalModel = false } = await request.json();
@@ -47,10 +61,10 @@ export async function POST(request: Request) {
             }
           }),
           timeoutPromise
-        ]);
+        ]) as LocalApiResponse;
         
         // Parse the response from the local API
-        response = result.data.response || "I'm sorry, I couldn't process that request.";
+        response = result.data?.response || "I'm sorry, I couldn't process that request.";
         
       } else {
         // Use Hugging Face's Gemma model
@@ -74,10 +88,10 @@ If this is a mathematical question, please solve it step by step: ${text}<end_of
             }
           }),
           timeoutPromise
-        ]);
+        ]) as HfTextGenerationResponse;
 
         // Extract just the model's response from the generated text
-        response = (result as any).generated_text || "I'm sorry, I couldn't process that request.";
+        response = result.generated_text || "I'm sorry, I couldn't process that request.";
         
         // Remove the prompt part to get only the response
         if (response.includes("<start_of_turn>model\n")) {
