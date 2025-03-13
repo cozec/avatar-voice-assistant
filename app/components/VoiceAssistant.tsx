@@ -221,9 +221,9 @@ const VoiceAssistant = () => {
     
     if (recognitionRef.current) {
       // Remove all event handlers
-      recognitionRef.current.onresult = null;
-      recognitionRef.current.onerror = null;
-      recognitionRef.current.onend = null;
+      recognitionRef.current.onresult = () => {};
+      recognitionRef.current.onerror = () => {};
+      recognitionRef.current.onend = () => {};
       
       try {
         // Stop if it's running
