@@ -11,7 +11,7 @@ export default function Home() {
     <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gradient-to-b from-blue-50 to-white dark:from-gray-900 dark:to-gray-800">
       <header className="w-full max-w-4xl text-center mb-8">
         <h1 className="text-4xl font-bold mb-2">Voice Assistant</h1>
-        <p className="text-gray-600 dark:text-gray-300">Speak to me and I'll respond with voice</p>
+        <p className="text-gray-600 dark:text-gray-300">Speak to me and I&apos;ll respond with voice</p>
       </header>
       
       <div className="w-full max-w-4xl">

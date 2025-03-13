@@ -30,7 +30,7 @@ const AdvancedVoiceRecorder = () => {
         URL.revokeObjectURL(responseAudioUrl);
       }
     };
-  }, []);
+  }, [audioUrl, responseAudioUrl]);
   
   const startRecording = async () => {
     try {
@@ -42,8 +42,9 @@ const AdvancedVoiceRecorder = () => {
       
       await recorderRef.current?.startRecording();
       setIsRecording(true);
-    } catch (err: any) {
-      setError(err.message || 'Failed to start recording');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to start recording';
+      setError(errorMessage);
       console.error('Recording error:', err);
     }
   };
@@ -62,8 +63,9 @@ const AdvancedVoiceRecorder = () => {
       
       // Process the audio file
       await processAudioFile(audioFile);
-    } catch (err: any) {
-      setError(err.message || 'Failed to stop recording');
+    } catch (err: unknown) {
+      const errorMessage = err instanceof Error ? err.message : 'Failed to stop recording';
+      setError(errorMessage);
       setIsRecording(false);
       console.error('Recording error:', err);
     }
@@ -100,7 +102,7 @@ const AdvancedVoiceRecorder = () => {
         responseAudioRef.current.src = ttsResponse.data.audioUrl;
         responseAudioRef.current.play();
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error processing audio:', err);
       setError('Error processing your audio. Please try again.');
     } finally {
