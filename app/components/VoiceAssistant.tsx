@@ -615,10 +615,24 @@ const VoiceAssistant = () => {
   
   // Toggle model between online and local
   const toggleModel = useCallback((e: React.MouseEvent) => {
+    console.log("toggleModel called");
     e.preventDefault();
-    if (!isMountedRef.current) return;
+    e.stopPropagation();
     
-    setUseLocalModel(prev => !prev);
+    if (!isMountedRef.current) {
+      console.log("Component not mounted, ignoring toggle");
+      return;
+    }
+    
+    // Toggle the model and log the change
+    setUseLocalModel(prev => {
+      const newValue = !prev;
+      console.log(`Model switched to: ${newValue ? 'DeepSeek Math (Local)' : 'Gemma (Online)'}`);
+      return newValue;
+    });
+    
+    // Return false to prevent any default behavior
+    return false;
   }, []);
   
   // Set up audio context when listening starts
@@ -868,6 +882,16 @@ const VoiceAssistant = () => {
     >
       <div className="w-full bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 transition-all duration-300">
         <div className="flex flex-col items-center space-y-6">
+          {/* Einstein Avatar */}
+          <div className="w-24 h-24 mb-2 overflow-hidden rounded-full border-4 border-blue-500 shadow-lg">
+            <img 
+              src="/einstein_avatar.jpeg" 
+              alt="Einstein Avatar" 
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <h2 className="text-xl font-bold text-gray-800 dark:text-gray-200 mb-2">Einstein AI Assistant</h2>
+          
           <div className="flex items-center space-x-2 mb-4">
             <span className={`text-sm ${!useLocalModel ? 'text-blue-500 font-medium' : 'text-gray-500'}`}>
               Gemma (Online)
@@ -875,7 +899,7 @@ const VoiceAssistant = () => {
             <button 
               onClick={toggleModel}
               type="button"
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none voice-assistant-button ${
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none voice-assistant-button model-toggle-button ${
                 useLocalModel ? 'bg-green-500' : 'bg-blue-500'
               }`}
             >
@@ -1046,6 +1070,18 @@ const VoiceAssistantWrapper = () => {
 
   // Prevent click propagation at the wrapper level
   const preventClickPropagation = (e: React.MouseEvent) => {
+    const target = e.target as Element;
+    
+    // Check if this is the model toggle button
+    const isModelToggle = target.closest('.model-toggle-button') || 
+                         target.classList.contains('model-toggle-button');
+    
+    // Allow model toggle button clicks to proceed
+    if (isModelToggle) {
+      console.log("Allowing model toggle button click in preventClickPropagation");
+      return true;
+    }
+    
     console.log("Preventing click propagation at wrapper level");
     e.stopPropagation();
     e.preventDefault();
@@ -1069,6 +1105,16 @@ const VoiceAssistantWrapper = () => {
       const isInsideComponent = target.closest('.voice-assistant-wrapper');
       
       if (isInsideComponent) {
+        // Check if this is the model toggle button
+        const isModelToggle = target.closest('.model-toggle-button') || 
+                             target.classList.contains('model-toggle-button');
+        
+        // Allow model toggle button clicks to proceed
+        if (isModelToggle) {
+          console.log("Allowing model toggle button click");
+          return true;
+        }
+        
         // If it's any form of navigation element, prevent it
         if (target.tagName === 'A' || target.closest('a') || 
             target.tagName === 'BUTTON' || target.closest('button') ||
@@ -1096,6 +1142,17 @@ const VoiceAssistantWrapper = () => {
     <div 
       onClick={preventClickPropagation}
       onMouseDown={(e) => {
+        // Check if this is the model toggle button
+        const target = e.target as Element;
+        const isModelToggle = target.closest('.model-toggle-button') || 
+                             target.classList.contains('model-toggle-button');
+        
+        // Allow model toggle button clicks to proceed
+        if (isModelToggle) {
+          console.log("Allowing model toggle button click in onMouseDown");
+          return true;
+        }
+        
         // Only prevent default for non-interactive elements
         if ((e.target as Element).tagName !== 'DIV') {
           e.stopPropagation();
