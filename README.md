@@ -1,36 +1,111 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Voice Assistant
+
+A web-based voice assistant application that provides a voice-in, voice-out experience. This application uses speech-to-text (STT/ASR) to transcribe user speech, processes the text using Large Language Models (LLMs), and returns audio responses using text-to-speech (TTS).
+
+## Features
+
+- 🎤 **Voice Input**: Captures user speech using browser's Web Speech API or server-side STT
+- 🧠 **LLM Processing**: Processes user queries using OpenAI's GPT models
+- 🔊 **Voice Output**: Converts responses to speech using OpenAI's TTS API
+- 🌐 **Web-Based**: Runs in any modern browser, no installation required
+- 🔄 **Real-Time**: Provides fast and responsive conversational experience
+
+## Technologies Used
+
+- **Frontend**: Next.js, React, TailwindCSS
+- **APIs**: OpenAI (GPT, Whisper, TTS)
+- **Speech Recognition**: Web Speech API (browser-based), OpenAI Whisper (server-side)
+- **Text-to-Speech**: OpenAI TTS API
+- **Deployment**: Vercel
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
+
+- Node.js (version 18.x or higher)
+- npm or yarn
+- OpenAI API key
+
+### Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/avatar-voice-assistant.git
+   cd avatar-voice-assistant
+   ```
+
+2. Install dependencies:
+   ```bash
+   npm install
+   # or
+   yarn install
+   ```
+
+3. Create a `.env.local` file from the example:
+   ```bash
+   cp .env.local.example .env.local
+   ```
+
+4. Add your OpenAI API key to the `.env.local` file:
+   ```
+   OPENAI_API_KEY=your-openai-api-key-here
+   ```
+
+### Running Locally
 
 ```bash
 npm run dev
 # or
 yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) in your browser to see the application.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Usage
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Click the "Start Listening" button to begin voice capture
+2. Speak clearly into your microphone
+3. Click "Stop Listening" when you're done speaking
+4. The application will transcribe your speech, process it, and respond with synthesized speech
 
-## Learn More
+## Deployment
 
-To learn more about Next.js, take a look at the following resources:
+This project is configured for easy deployment on Vercel:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Push your code to GitHub
+2. Connect your GitHub repository to Vercel
+3. Configure environment variables in Vercel dashboard
+4. Deploy!
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project Structure
 
-## Deploy on Vercel
+```
+avatar-voice-assistant/
+├── app/
+│   ├── api/
+│   │   ├── llm/       # LLM processing endpoints
+│   │   ├── stt/       # Speech-to-text endpoints
+│   │   └── tts/       # Text-to-speech endpoints
+│   ├── components/    # React components
+│   ├── lib/           # Utility functions & classes
+│   ├── layout.tsx     # Main layout
+│   └── page.tsx       # Main page
+├── public/            # Static assets
+├── .env.local.example # Environment variables template
+├── package.json       # Dependencies
+└── README.md          # This file
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Contributing
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgements
+
+- OpenAI for their API services
+- Next.js team for the awesome framework
+- The open-source community for inspiration and resources
