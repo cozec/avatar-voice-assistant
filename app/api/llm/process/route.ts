@@ -15,19 +15,22 @@ const LOCAL_API_URL = 'http://localhost:11434/api/generate'; // Ollama API URL -
 interface LocalApiResponse {
   data: {
     response: string;
-    [key: string]: any;
+    [key: string]: unknown;
   };
 }
 
 // Define interface for Hugging Face text generation response
 interface HfTextGenerationResponse {
   generated_text: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export async function POST(request: Request) {
   try {
-    const { text, useLocalModel = false } = await request.json();
+    const { text, useLocalModel = false } = await request.json() as { 
+      text: string;
+      useLocalModel?: boolean;
+    };
 
     if (!text || typeof text !== 'string') {
       return NextResponse.json(
