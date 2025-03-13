@@ -67,13 +67,13 @@ const VoiceAssistant = () => {
   const originalPushStateRef = useRef<typeof window.history.pushState | null>(null);
   
   // Define refs to avoid circular dependencies
-  const processTranscriptRef = useRef<() => Promise<void>>();
-  const startListeningRef = useRef<() => void>();
-  const stopListeningAndProcessRef = useRef<() => void>();
+  const processTranscriptRef = useRef<(() => Promise<void>) | null>(null);
+  const startListeningRef = useRef<(() => void) | null>(null);
+  const stopListeningAndProcessRef = useRef<(() => void) | null>(null);
   // Add refs for the handler functions
-  const handleRecognitionResultRef = useRef<(event: SpeechRecognitionEvent) => void>();
-  const handleRecognitionErrorRef = useRef<(event: SpeechRecognitionErrorEvent) => void>();
-  const handleRecognitionEndRef = useRef<() => void>();
+  const handleRecognitionResultRef = useRef<((event: SpeechRecognitionEvent) => void) | null>(null);
+  const handleRecognitionErrorRef = useRef<((event: SpeechRecognitionErrorEvent) => void) | null>(null);
+  const handleRecognitionEndRef = useRef<(() => void) | null>(null);
   
   // Fix: Use an asynchronous XMLHttpRequest with navigation prevention
   const preventNavRequest = useCallback((url: string, body: any): Promise<any> => {
@@ -280,7 +280,7 @@ const VoiceAssistant = () => {
         setTimeout(() => {
           if (isMountedRef.current && isListening && !isProcessing && stopListeningAndProcessRef.current) {
             console.log("Final transcript detected - stopping listening and processing immediately");
-            stopListeningAndProcessRef.current();
+            stopListeningAndProcessRef.current && stopListeningAndProcessRef.current();
           }
         }, 300); // Reduced from 1000ms to 300ms for faster response
       }
@@ -434,7 +434,7 @@ const VoiceAssistant = () => {
     // Process transcript if we have content - immediately without delay
     if (transcript.trim() !== '' && processTranscriptRef.current) {
       // Process immediately without delay
-      processTranscriptRef.current();
+      processTranscriptRef.current && processTranscriptRef.current();
     }
   }, [isListening, isProcessing, transcript]);
   
@@ -483,7 +483,7 @@ const VoiceAssistant = () => {
         // Process transcript if we have content - no delay, process immediately
         if (transcript.trim() !== '' && processTranscriptRef.current) {
           console.log("Processing transcript after stopping");
-          processTranscriptRef.current();
+          processTranscriptRef.current && processTranscriptRef.current();
         }
       } else {
         // If not listening, start fresh
@@ -501,7 +501,7 @@ const VoiceAssistant = () => {
         // Then start listening with a slight delay to ensure state is updated
         setTimeout(() => {
           if (isMountedRef.current && startListeningRef.current) {
-            startListeningRef.current();
+            startListeningRef.current && startListeningRef.current();
           }
         }, 10);
       }
@@ -666,7 +666,7 @@ const VoiceAssistant = () => {
         if (totalListeningTime > maxListeningTimeRef.current) {
           console.log("Max listening time reached");
           if (isListening && !isProcessing && transcript.trim() !== '' && stopListeningAndProcessRef.current) {
-            stopListeningAndProcessRef.current();
+            stopListeningAndProcessRef.current && stopListeningAndProcessRef.current();
           } else if (isListening) {
             cleanupRecognition();
             setIsListening(false);
@@ -678,7 +678,7 @@ const VoiceAssistant = () => {
         if (elapsedSinceActivity > 1500 && transcript.trim() !== '') {
           console.log(`Silence detected for ${elapsedSinceActivity}ms - stopping and processing immediately`);
           if (stopListeningAndProcessRef.current) {
-            stopListeningAndProcessRef.current();
+            stopListeningAndProcessRef.current && stopListeningAndProcessRef.current();
           }
         }
       }, 500);
