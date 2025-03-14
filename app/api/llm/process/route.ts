@@ -106,8 +106,21 @@ If this is a mathematical question, please solve it step by step: ${text}<end_of
       
     } catch (error) {
       console.error('LLM API error or timeout:', error);
+      
+      // Check if this was a client cancellation
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      const isCancelled = errorMessage.includes('cancel') || errorMessage.includes('abort');
+      
       // Provide a graceful response if the model call fails
       const modelType = useLocalModel ? "local DeepSeek Math" : "Hugging Face Gemma";
+      
+      if (isCancelled) {
+        return NextResponse.json({
+          response: "The request was cancelled.",
+          cancelled: true
+        });
+      }
+      
       return NextResponse.json({ 
         response: `I apologize, but it's taking longer than expected to process your request. The ${modelType} model may be experiencing issues. Your question was: '${text}'. Please try again in a few minutes or try the other model option.`
       });

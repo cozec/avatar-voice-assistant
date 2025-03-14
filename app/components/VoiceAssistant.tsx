@@ -44,6 +44,7 @@ const VoiceAssistant = () => {
   const [transcript, setTranscript] = useState('');
   const [response, setResponse] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isInferencing, setIsInferencing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [useLocalModel, setUseLocalModel] = useState(false);
@@ -74,12 +75,23 @@ const VoiceAssistant = () => {
   const handleRecognitionErrorRef = useRef<((event: SpeechRecognitionErrorEvent) => void) | null>(null);
   const handleRecognitionEndRef = useRef<(() => void) | null>(null);
   
-  // Fix: Use an asynchronous XMLHttpRequest with navigation prevention
+  const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Fix: Use an asynchronous XMLHttpRequest with navigation prevention and cancellation support
   const preventNavRequest = useCallback((url: string, body: Record<string, unknown>): Promise<Record<string, unknown>> => {
     console.log(`Making navigation-safe request to ${url}`);
     
+    // Create a new AbortController for this request
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+    
     return new Promise((resolve, reject) => {
       try {
+        // Set inferencing state for LLM requests
+        if (url.includes('/api/llm/process')) {
+          setIsInferencing(true);
+        }
+        
         // Create XMLHttpRequest
         const xhr = new XMLHttpRequest();
         xhr.open('POST', url, true); // true for asynchronous
@@ -88,6 +100,10 @@ const VoiceAssistant = () => {
         
         // Handle completion
         xhr.onload = function() {
+          if (url.includes('/api/llm/process')) {
+            setIsInferencing(false);
+          }
+          
           if (xhr.status >= 200 && xhr.status < 300) {
             resolve(JSON.parse(xhr.responseText));
           } else {
@@ -97,16 +113,46 @@ const VoiceAssistant = () => {
         
         // Handle errors
         xhr.onerror = function() {
+          if (url.includes('/api/llm/process')) {
+            setIsInferencing(false);
+          }
           reject(new Error('Network error occurred'));
         };
+        
+        // Handle abort
+        xhr.onabort = function() {
+          if (url.includes('/api/llm/process')) {
+            setIsInferencing(false);
+          }
+          reject(new Error('Request was cancelled'));
+        };
+        
+        // Check for abort signal
+        signal.addEventListener('abort', () => {
+          xhr.abort();
+        });
         
         // Send the request
         xhr.send(JSON.stringify(body));
       } catch (error) {
+        if (url.includes('/api/llm/process')) {
+          setIsInferencing(false);
+        }
         console.error('Request error:', error);
         reject(error);
       }
     });
+  }, []);
+  
+  // Cancel the current inference request
+  const cancelInference = useCallback(() => {
+    console.log("Cancelling inference request");
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsInferencing(false);
+    setError("Inference cancelled by user");
   }, []);
   
   // Process transcript function - defined early to avoid circular reference
@@ -136,6 +182,13 @@ const VoiceAssistant = () => {
         });
         
         if (!isMountedRef.current) return;
+        
+        // Check if the request was cancelled
+        if (llmResponse.cancelled) {
+          console.log("LLM request was cancelled");
+          setIsProcessing(false);
+          return;
+        }
         
         const generatedResponse = llmResponse.response;
         setResponse(generatedResponse);
@@ -1021,9 +1074,25 @@ const VoiceAssistant = () => {
           
           {isProcessing && !response && (
             <div className="p-4 bg-gray-50 dark:bg-gray-700/20 rounded-lg shadow-sm transition-all duration-300">
-              <div className="flex items-center space-x-3">
-                <div className="animate-spin rounded-full h-5 w-5 border-2 border-t-blue-500 border-blue-200"></div>
-                <span className="text-gray-600 dark:text-gray-300 text-sm">Processing...</span>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="animate-spin rounded-full h-5 w-5 border-2 border-t-blue-500 border-blue-200"></div>
+                  <span className="text-gray-600 dark:text-gray-300 text-sm">
+                    {isInferencing ? "AI is thinking..." : "Processing..."}
+                  </span>
+                </div>
+                
+                {/* Stop button - only visible during inferencing */}
+                {isInferencing && (
+                  <button
+                    onClick={cancelInference}
+                    type="button"
+                    className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-medium rounded-md transition-colors"
+                    aria-label="Stop inference"
+                  >
+                    Stop
+                  </button>
+                )}
               </div>
             </div>
           )}
