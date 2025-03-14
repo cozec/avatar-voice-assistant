@@ -59,7 +59,7 @@ const VoiceAssistant = () => {
   const microphoneStreamRef = useRef<MediaStream | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const activityTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const maxListeningTimeRef = useRef<number>(15000); // Max 15 seconds of listening time
+  const maxListeningTimeRef = useRef<number>(3600000); // Increased from 15s to 1 hour (effectively unlimited)
   const activityTimestampRef = useRef<number>(0);
   const restartAttemptRef = useRef<number>(0);
   const isMountedRef = useRef<boolean>(true);
@@ -203,25 +203,29 @@ const VoiceAssistant = () => {
       }
       
       setIsProcessing(true);
+      console.log("Set isProcessing to true");
       
       // Step 1: Process with LLM using safe request
       try {
+        console.log("Sending request to LLM API");
         const llmResponse = await preventNavRequest('/api/llm/process', {
           text: transcript,
           useLocalModel: useLocalModel
         });
         
         if (!isMountedRef.current) return;
+        console.log("LLM API response received:", llmResponse);
         
         // Check if the request was cancelled
         if (llmResponse.cancelled || llmResponse.status === "cancelled") {
           console.log("LLM request was cancelled");
           setIsProcessing(false);
+          console.log("Set isProcessing to false because request was cancelled");
           setCancelMessage("LLM stopped by user"); // Changed message as requested
           
           // Keep the cancelled message visible for 3 seconds
           setTimeout(() => {
-      if (isMountedRef.current) {
+            if (isMountedRef.current) {
               setCancelMessage(null);
             }
           }, 3000);
@@ -231,9 +235,11 @@ const VoiceAssistant = () => {
         
         const generatedResponse = llmResponse.response as string;
         setResponse(generatedResponse);
+        console.log("Set response to:", generatedResponse.substring(0, 50) + "...");
         
         // Step 2: Generate audio from text if LLM step succeeded
         try {
+          console.log("Sending request to TTS API");
           const ttsResponse = await preventNavRequest('/api/tts/generate', {
             text: generatedResponse,
             useBrowserTTS: false, // Set to false to use gTTS by default
@@ -243,7 +249,7 @@ const VoiceAssistant = () => {
           if (!isMountedRef.current) return;
           
           // Check data format from the TTS endpoint
-          console.log("TTS response:", ttsResponse);
+          console.log("TTS response received:", ttsResponse);
           
           // Check if we should use browser's TTS
           if (ttsResponse.useBrowserTTS) {
@@ -253,10 +259,16 @@ const VoiceAssistant = () => {
               const utterance = new SpeechSynthesisUtterance(textToSpeak);
               utterance.rate = 1.0;
               utterance.pitch = 1.0;
+              utterance.onend = () => {
+                console.log("Browser speech synthesis completed");
+                setIsProcessing(false);
+                console.log("Set isProcessing to false after speech synthesis completed");
+              };
               window.speechSynthesis.speak(utterance);
             } else {
               console.error('Browser speech synthesis not supported');
               setError('Your browser does not support speech synthesis');
+              setIsProcessing(false); // Make sure to reset processing state
             }
           } 
           // Check if gTTS was used
@@ -275,6 +287,13 @@ const VoiceAssistant = () => {
               // Add a small delay before playing to ensure audio is loaded
               setTimeout(() => {
                 if (audioRef.current) {
+                  // Add onended handler to reset isProcessing when audio finishes
+                  audioRef.current.onended = () => {
+                    console.log("Audio playback completed");
+                    setIsProcessing(false);
+                    console.log("Set isProcessing to false after audio playback completed");
+                  };
+                  
                   const playPromise = audioRef.current.play();
                   
                   if (playPromise !== undefined) {
@@ -288,7 +307,16 @@ const VoiceAssistant = () => {
                         if ('speechSynthesis' in window) {
                           console.log("Falling back to browser TTS");
                           window.speechSynthesis.cancel(); // Cancel any ongoing speech
-                          window.speechSynthesis.speak(new SpeechSynthesisUtterance(generatedResponse));
+                          const utterance = new SpeechSynthesisUtterance(generatedResponse);
+                          // Reset processing state when speech synthesis ends
+                          utterance.onend = () => {
+                            console.log("Browser TTS completed");
+                            setIsProcessing(false);
+                          };
+                          window.speechSynthesis.speak(utterance);
+                        } else {
+                          // If browser TTS is unavailable, ensure we reset the state
+                          setIsProcessing(false);
                         }
                       });
                   }
@@ -306,13 +334,32 @@ const VoiceAssistant = () => {
               // Play the audio
               if (audioRef.current) {
                 audioRef.current.src = audioURL;
-                audioRef.current.play();
+                
+                // Add onended handler to reset processing state
+                audioRef.current.onended = () => {
+                  console.log("Audio playback completed");
+                  setIsProcessing(false);
+                  console.log("Set isProcessing to false from audio element onEnded");
+                };
+                
+                audioRef.current.play().catch(err => {
+                  console.error("Error playing audio:", err);
+                  setIsProcessing(false);
+                });
               }
             } else {
               console.error('No audio URL in response');
               // Fallback to browser TTS if available
               if ('speechSynthesis' in window) {
-                window.speechSynthesis.speak(new SpeechSynthesisUtterance(generatedResponse));
+                const utterance = new SpeechSynthesisUtterance(generatedResponse);
+                utterance.onend = () => {
+                  console.log("Browser TTS completed");
+                  setIsProcessing(false);
+                };
+                window.speechSynthesis.speak(utterance);
+              } else {
+                // Ensure processing state is reset if we can't play audio
+                setIsProcessing(false);
               }
             }
           }
@@ -320,7 +367,15 @@ const VoiceAssistant = () => {
           console.error('TTS request error:', err);
           // Continue even if TTS fails - fallback to browser TTS
           if ('speechSynthesis' in window) {
-            window.speechSynthesis.speak(new SpeechSynthesisUtterance(generatedResponse));
+            const utterance = new SpeechSynthesisUtterance(generatedResponse);
+            utterance.onend = () => {
+              console.log("Browser TTS completed after error");
+              setIsProcessing(false);
+            };
+            window.speechSynthesis.speak(utterance);
+          } else {
+            // Ensure processing state is reset if TTS fails
+            setIsProcessing(false);
           }
         }
       } catch (err) {
@@ -333,10 +388,21 @@ const VoiceAssistant = () => {
       console.error('Error processing request:', err);
       if (isMountedRef.current) {
         setError('Error processing your request. Please try again.');
+        setIsProcessing(false);
+        console.log("Set isProcessing to false due to error");
       }
     } finally {
       if (isMountedRef.current) {
-        setIsProcessing(false);
+        // Add a timeout to ensure we reset processing state
+        // This is a safety measure in case the audio events don't fire properly
+        setTimeout(() => {
+          if (isMountedRef.current && isProcessing) {
+            console.log("Safety timeout: Forcing isProcessing to false");
+            setIsProcessing(false);
+          }
+        }, 15000); // 15 second safety timeout
+        
+        console.log("processTranscript finally block executed");
       }
     }
   }, [isProcessing, transcript, useLocalModel, preventNavRequest, isMountedRef, wasCancelled, error]);
@@ -382,6 +448,7 @@ const VoiceAssistant = () => {
     for (let i = 0; i < Object.keys(results).length; i++) {
       if (results[i] && results[i][0]) {
         const transcript = results[i][0].transcript;
+        console.log(`Speech detected - Part ${i}: "${transcript}" (final: ${(results[i] as any).isFinal})`);
         
         if ((results[i] as any).isFinal) {
           finalTranscript += transcript;
@@ -599,11 +666,13 @@ const VoiceAssistant = () => {
         
         // First update the state
         setIsListening(false);
+        console.log("Set isListening to false");
         
         // Then stop recognition and processing if needed
         if (recognitionRef.current) {
           try {
             recognitionRef.current.stop();
+            console.log("Stopped recognition");
           } catch (err) {
             console.error("Error stopping recognition:", err);
           }
@@ -615,6 +684,8 @@ const VoiceAssistant = () => {
         if (transcript.trim() !== '' && processTranscriptRef.current) {
           console.log("Processing transcript after stopping");
           processTranscriptRef.current();
+        } else {
+          console.log("No transcript to process or processTranscriptRef is null");
         }
       } else {
         // If not listening, start fresh
@@ -627,12 +698,16 @@ const VoiceAssistant = () => {
         setError(null);
         setTranscriptFinal(false);
         lastTranscriptRef.current = '';
-      setListeningTime(0);
+        setListeningTime(0);
         
         // Then start listening with a slight delay to ensure state is updated
         setTimeout(() => {
           if (isMountedRef.current && startListeningRef.current) {
+            console.log("Calling startListeningRef.current()");
             startListeningRef.current();
+          } else {
+            console.log("Not starting: component unmounted or startListeningRef is null", 
+                     { isMounted: isMountedRef.current, hasStartListening: !!startListeningRef.current });
           }
         }, 10);
       }
@@ -715,7 +790,7 @@ const VoiceAssistant = () => {
     }
   }, []);
   
-  // Update audio level for visualization
+  // Update audio level for visualization and voice activity detection
   const updateAudioLevel = () => {
     if (!isMountedRef.current) return;
     
@@ -731,6 +806,22 @@ const VoiceAssistant = () => {
       }
       const average = sum / bufferLength;
       setAudioLevel(average);
+      
+      // Implement basic Voice Activity Detection
+      // If average volume is above threshold, consider it as speech
+      const VOICE_THRESHOLD = 25; // Increased from 15 to reduce background noise detection
+      
+      // Get the current log count from a ref to avoid re-renders
+      const shouldLog = Math.random() < 0.1; // Only log approximately 10% of the time
+      
+      if (average > VOICE_THRESHOLD) {
+        if (shouldLog) console.log(`Voice activity detected: ${average.toFixed(2)}`);
+        // Update activity timestamp for VAD
+        activityTimestampRef.current = Date.now();
+      } else if (shouldLog) {
+        // Log when below threshold, but only occasionally to reduce console spam
+        console.log(`Audio level below threshold: ${average.toFixed(2)}`);
+      }
       
       // Continue the animation loop
       animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
@@ -761,7 +852,11 @@ const VoiceAssistant = () => {
   
   // Fix the useEffect dependencies
   useEffect(() => {
+    // Initialize timeout reference at the effect scope level
+    let forceStopTimeout: NodeJS.Timeout | null = null;
+    
     if (isListening) {
+      console.log('Starting audio setup because isListening changed to true');
       setupAudioContext();
       
       // Set initial activity timestamp
@@ -771,6 +866,20 @@ const VoiceAssistant = () => {
       if (activityTimerRef.current) {
         clearInterval(activityTimerRef.current);
       }
+      
+      // Add a hard timeout to force stop listening after 60 seconds
+      // This is a safety mechanism in case silence detection fails
+      forceStopTimeout = setTimeout(() => {
+        if (isListening && isMountedRef.current) {
+          console.log("Force stopping recording after 60 seconds");
+          if (transcript.trim() !== '' && stopListeningAndProcessRef.current) {
+            stopListeningAndProcessRef.current();
+          } else {
+            cleanupRecognition();
+            setIsListening(false);
+          }
+        }
+      }, 60000); // 60 seconds maximum recording time
       
       // Set up timer to check for inactivity and max listening time
       const timer = setInterval(() => {
@@ -787,6 +896,7 @@ const VoiceAssistant = () => {
         setListeningTime(totalListeningTime);
         
         // Check if we've exceeded max listening time
+        // Note: This is set to 1 hour now, effectively removing the limit
         if (totalListeningTime > maxListeningTimeRef.current) {
           console.log("Max listening time reached");
           if (isListening && !isProcessing && transcript.trim() !== '' && stopListeningAndProcessRef.current) {
@@ -798,17 +908,29 @@ const VoiceAssistant = () => {
           return;
         }
         
-        // Check for silence - if no new activity for 1.5 seconds and we have transcript (reduced from 2s for faster response)
-        if (elapsedSinceActivity > 1500 && transcript.trim() !== '') {
-          console.log(`Silence detected for ${elapsedSinceActivity}ms - stopping and processing immediately`);
-          if (stopListeningAndProcessRef.current) {
-            stopListeningAndProcessRef.current();
+        // Check for silence - improved to work even without transcript
+        const SILENCE_THRESHOLD = 1500; // Reduced from 2000ms to 1500ms for faster detection
+        if (elapsedSinceActivity > SILENCE_THRESHOLD) {
+          console.log(`Potential silence detected: ${elapsedSinceActivity}ms since last activity`);
+          
+          if (transcript.trim() !== '') {
+            // If we have a transcript and silence is detected, process it
+            console.log(`Silence detected with transcript - stopping and processing`);
+            if (stopListeningAndProcessRef.current) {
+              stopListeningAndProcessRef.current();
+            }
+          } else if (elapsedSinceActivity > 3000) { // Reduced from 5000ms to 3000ms
+            // If no transcript after 3 seconds of silence, just stop listening
+            console.log(`Extended silence with no transcript - stopping listening`);
+            cleanupRecognition();
+            setIsListening(false);
           }
         }
       }, 500);
       
       activityTimerRef.current = timer;
     } else {
+      console.log('Cleaning up audio because isListening changed to false');
       cleanupAudioContext();
       if (activityTimerRef.current) {
         clearInterval(activityTimerRef.current);
@@ -822,12 +944,40 @@ const VoiceAssistant = () => {
         clearInterval(activityTimerRef.current);
         activityTimerRef.current = null;
       }
+      
+      // Clear the force stop timeout if it exists
+      if (forceStopTimeout) {
+        clearTimeout(forceStopTimeout);
+        forceStopTimeout = null;
+      }
     };
-  }, [isListening, transcript, isProcessing, cleanupAudioContext, setupAudioContext, listeningTime]);
+  }, [isListening, transcript, isProcessing, cleanupAudioContext, setupAudioContext, listeningTime, cleanupRecognition, stopListeningAndProcessRef, isMountedRef]);
   
   // Clean up on component unmount
   useEffect(() => {
     isMountedRef.current = true;
+    
+    // Check browser compatibility for speech recognition
+    if (typeof window !== 'undefined') {
+      if (!window.SpeechRecognition && !window.webkitSpeechRecognition) {
+        console.error("Speech Recognition API is not supported in this browser");
+        setError("Speech Recognition is not supported in your browser. Please use Chrome, Edge, or Safari.");
+      } else {
+        // Test if the API actually works by creating an instance
+        try {
+          const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+          const testRecognition = new (SpeechRecognition as any)();
+          console.log("Speech Recognition API is available:", testRecognition ? "Yes" : "No");
+          testRecognition.continuous = false;
+          testRecognition.interimResults = false;
+          testRecognition.onend = () => {}; // Empty callback
+          // Don't actually start it, just test if it can be instantiated
+        } catch (e) {
+          console.error("Error while testing Speech Recognition API:", e);
+          setError("There was an error initializing speech recognition. Please try reloading the page.");
+        }
+      }
+    }
     
     // Add a listener to prevent navigation
     const preventNavigation = (e: MouseEvent) => {
@@ -868,7 +1018,12 @@ const VoiceAssistant = () => {
 
   // Format time for display
   const formatTime = (ms: number) => {
-    const seconds = Math.floor(ms / 1000);
+    const seconds = Math.floor(ms / 1000) % 60;
+    const minutes = Math.floor(ms / 60000);
+    
+    if (minutes > 0) {
+      return `${minutes}m ${seconds}s`;
+    }
     return `${seconds}s`;
   };
 
@@ -1112,11 +1267,11 @@ const VoiceAssistant = () => {
           <div className="text-sm text-gray-500 dark:text-gray-400 flex flex-col items-center">
             {isListening ? (
               <>
-                <p>Listening... {formatTime(listeningTime)} / {formatTime(maxListeningTimeRef.current)}</p>
+                <p>Listening... {formatTime(listeningTime)}</p>
                 <p className="text-xs mt-1">
                   {transcriptFinal 
                     ? "Processing will begin automatically" 
-                    : "Will auto-process after 1.5s of silence or 15s total"}
+                    : "Will auto-process after silence is detected"}
                 </p>
               </>
             ) : (
@@ -1188,35 +1343,25 @@ const VoiceAssistant = () => {
                 Error:
               </h3>
               <p>{error}</p>
-              {(() => { console.log("Rendering error message:", error); return null; })()}
             </div>
           )}
         </div>
       </div>
       
       {audioUrl && (
-        <audio 
-          ref={audioRef} 
-          src={audioUrl} 
-          controls  // Add controls for debugging
-          onPlay={() => console.log("Audio started playing")}
+        <audio
+          ref={audioRef}
+          src={audioUrl || ''}
+          style={{ width: '100%', display: 'none' }}
+          controls
+          onEnded={() => {
+            console.log("Audio playback completed from audio element");
+            setIsProcessing(false);
+            console.log("Set isProcessing to false from audio element onEnded");
+          }}
           onError={(e) => {
             console.error("Audio error:", e);
-            // Log more detailed error information
-            const audioElement = e.currentTarget as HTMLAudioElement;
-            console.error("Audio error code:", audioElement.error?.code);
-            console.error("Audio error message:", audioElement.error?.message);
-            console.error("Audio URL that failed:", audioUrl);
-            
-            if (isMountedRef.current) {
-              setError("Failed to play audio response. Falling back to browser TTS.");
-              
-              // Fall back to browser TTS
-              if ('speechSynthesis' in window && response) {
-                window.speechSynthesis.cancel(); // Cancel any ongoing speech
-                window.speechSynthesis.speak(new SpeechSynthesisUtterance(response));
-              }
-            }
+            setIsProcessing(false);
           }}
         />
       )}
@@ -1224,124 +1369,4 @@ const VoiceAssistant = () => {
   );
 };
 
-// Add a wrapper component to catch any navigation attempts
-const VoiceAssistantWrapper = () => {
-  // Prevent any form submissions at the wrapper level
-  const preventAnyFormSubmission = (e: React.FormEvent) => {
-    console.log("Preventing form submission at wrapper level");
-    e.preventDefault();
-    e.stopPropagation();
-    return false;
-  };
-
-  // Prevent click propagation at the wrapper level
-  const preventClickPropagation = (e: React.MouseEvent) => {
-    const target = e.target as Element;
-    
-    // Check if this is the model toggle button
-    const isModelToggle = target.closest('.model-toggle-button') || 
-                         target.classList.contains('model-toggle-button');
-    
-    // Check if this is the stop button
-    const isStopButton = target.closest('.stop-inference-button') || 
-                         target.closest('button[aria-label="Stop inference"]');
-    
-    // Allow model toggle button and stop button clicks to proceed
-    if (isModelToggle || isStopButton) {
-      console.log(`Allowing ${isStopButton ? 'stop button' : 'model toggle button'} click in preventClickPropagation`);
-      return true;
-    }
-    
-    console.log("Preventing click propagation at wrapper level");
-    e.stopPropagation();
-    e.preventDefault();
-    return false;
-  };
-
-  useEffect(() => {
-    // Add a global listener for form submissions
-    const handleFormSubmit = (e: Event) => {
-      console.log("Caught form submission globally", e);
-      e.preventDefault();
-      e.stopPropagation();
-      return false;
-    };
-
-    // Handle any clicks that might lead to navigation
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as Element;
-      
-      // Check if this is part of our component
-      const isInsideComponent = target.closest('.voice-assistant-wrapper');
-      
-      if (isInsideComponent) {
-        // Check if this is the model toggle button
-        const isModelToggle = target.closest('.model-toggle-button') || 
-                             target.classList.contains('model-toggle-button');
-        
-        // Check if this is the stop button
-        const isStopButton = target.closest('.stop-inference-button') || 
-                            target.closest('button[aria-label="Stop inference"]');
-        
-        // Allow model toggle button and stop button clicks to proceed
-        if (isModelToggle || isStopButton) {
-          console.log(`Allowing ${isStopButton ? 'stop button' : 'model toggle button'} click`);
-          return true;
-        }
-        
-        // If it's any form of navigation element, prevent it
-        if (target.tagName === 'A' || target.closest('a') || 
-            (target.tagName === 'BUTTON' && !isStopButton) || (target.closest('button') && !isStopButton) ||
-            target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'submit') {
-          console.log("Preventing potential navigation from click:", target.tagName);
-          e.preventDefault();
-          e.stopPropagation();
-        }
-      }
-    };
-
-    // Listen for any form submissions on the page
-    document.addEventListener('submit', handleFormSubmit, true);
-    // Listen for all clicks to prevent navigation
-    document.addEventListener('click', handleClick, true);
-    
-    return () => {
-      document.removeEventListener('submit', handleFormSubmit, true);
-      document.removeEventListener('click', handleClick, true);
-    };
-  }, []);
-
-  return (
-    // Wrapping div with preventative handlers - important: add onMouseDown handler too
-    <div 
-      onClick={preventClickPropagation}
-      onMouseDown={(e) => {
-        // Check if this is the model toggle button
-        const target = e.target as Element;
-        const isModelToggle = target.closest('.model-toggle-button') || 
-                             target.classList.contains('model-toggle-button');
-        
-        // Check if this is the stop button
-        const isStopButton = target.closest('.stop-inference-button') || 
-                            target.closest('button[aria-label="Stop inference"]');
-        
-        // Allow model toggle button and stop button clicks to proceed
-        if (isModelToggle || isStopButton) {
-          console.log(`Allowing ${isStopButton ? 'stop button' : 'model toggle button'} click in onMouseDown`);
-          return true;
-        }
-        
-        // Only prevent default for non-interactive elements
-        if ((e.target as Element).tagName !== 'DIV') {
-          e.stopPropagation();
-        }
-      }}
-      onSubmit={preventAnyFormSubmission}
-      className="voice-assistant-wrapper"
-    >
-      <VoiceAssistant />
-    </div>
-  );
-};
-
-export default VoiceAssistantWrapper; 
+export default VoiceAssistant;
