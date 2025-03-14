@@ -13,13 +13,16 @@
   },
   "dependencies": {
     "@huggingface/inference": "^3.5.2",
+    "@types/uuid": "^10.0.0",
     "axios": "^1.8.3",
     "dotenv": "^16.4.7",
+    "gtts": "^0.2.1",
     "next": "15.2.2",
     "node-fetch": "^3.3.2",
     "openai": "^4.87.3",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "uuid": "^11.1.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

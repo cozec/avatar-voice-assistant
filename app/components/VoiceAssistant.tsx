@@ -229,7 +229,7 @@ const VoiceAssistant = () => {
           return;
         }
         
-        const generatedResponse = llmResponse.response;
+        const generatedResponse = llmResponse.response as string;
         setResponse(generatedResponse);
         
         // Step 2: Generate audio from text if LLM step succeeded
@@ -249,7 +249,7 @@ const VoiceAssistant = () => {
           if (ttsResponse.useBrowserTTS) {
             // Use browser's built-in speech synthesis
             if ('speechSynthesis' in window) {
-              const textToSpeak = ttsResponse.text || generatedResponse;
+              const textToSpeak = (ttsResponse.text || generatedResponse) as string;
               const utterance = new SpeechSynthesisUtterance(textToSpeak);
               utterance.rate = 1.0;
               utterance.pitch = 1.0;
@@ -262,12 +262,12 @@ const VoiceAssistant = () => {
           // Check if gTTS was used
           else if (ttsResponse.useGTTS && ttsResponse.audioUrl) {
             console.log("Using gTTS with audio URL:", ttsResponse.audioUrl);
-            setAudioUrl(ttsResponse.audioUrl);
+            setAudioUrl(ttsResponse.audioUrl as string);
             
             // Play the audio with better error handling
             if (audioRef.current) {
               console.log("Attempting to play audio from:", ttsResponse.audioUrl);
-              audioRef.current.src = ttsResponse.audioUrl;
+              audioRef.current.src = ttsResponse.audioUrl as string;
               
               // Force audio to load before playing
               audioRef.current.load();
@@ -299,7 +299,7 @@ const VoiceAssistant = () => {
           // Fallback for other TTS services
           else {
             // Handle any other TTS services (like OpenAI TTS if it existed)
-            const audioURL = ttsResponse.audioUrl || (ttsResponse.data && ttsResponse.data.audioUrl);
+            const audioURL = ttsResponse.audioUrl || (ttsResponse.data && (ttsResponse.data as any).audioUrl);
             if (audioURL) {
               setAudioUrl(audioURL);
               
@@ -379,11 +379,11 @@ const VoiceAssistant = () => {
     let isFinal = false;
     
     // Process results
-    for (let i = 0; i < results.length; i++) {
+    for (let i = 0; i < Object.keys(results).length; i++) {
       if (results[i] && results[i][0]) {
         const transcript = results[i][0].transcript;
         
-        if (results[i].isFinal) {
+        if ((results[i] as any).isFinal) {
           finalTranscript += transcript;
           isFinal = true;
         } else {
@@ -490,7 +490,7 @@ const VoiceAssistant = () => {
       
       // Create a new SpeechRecognition instance
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      const recognition = new SpeechRecognition();
+      const recognition = new (SpeechRecognition as any)();
       
       // Configure recognition
       recognition.continuous = true;
@@ -695,7 +695,7 @@ const VoiceAssistant = () => {
         setIsListening(false);
       }
     }
-  }, [isMountedRef, updateAudioLevel, setError, setIsListening]);
+  }, [isMountedRef, setError, setIsListening]);
   
   // Use useCallback for cleanupAudioContext to avoid dependency changes
   const cleanupAudioContext = useCallback(() => {
@@ -955,7 +955,7 @@ const VoiceAssistant = () => {
     if (e) {
     e.preventDefault();
     e.stopPropagation();
-      e.stopImmediatePropagation();
+      (e as any).stopImmediatePropagation();
     }
     
     return false;
@@ -1188,7 +1188,7 @@ const VoiceAssistant = () => {
                 Error:
               </h3>
               <p>{error}</p>
-              {console.log("Rendering error message:", error)}
+              {(() => { console.log("Rendering error message:", error); return null; })()}
             </div>
           )}
         </div>

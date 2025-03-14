@@ -1,21 +1,16 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
-// Define the global audio cache on the global object
-declare global {
-  let __audioCache: {
-    [key: string]: {
-      filepath: string;
-      timestamp: number;
-      buffer: Buffer;
-    };
-  } | undefined;
-}
-
-export async function GET(
-  request: Request,
-  { params }: { params: { uuid: string } }
-) {
-  const { uuid } = params;
+export async function GET(request: NextRequest) {
+  // Get the UUID from query parameter instead of path parameter
+  const { searchParams } = new URL(request.url);
+  const uuid = searchParams.get('uuid');
+  
+  if (!uuid) {
+    return NextResponse.json(
+      { error: 'Missing UUID parameter' },
+      { status: 400 }
+    );
+  }
   
   // Check if the audio exists in our cache
   if (!global.__audioCache || !global.__audioCache[uuid]) {

@@ -22,15 +22,15 @@ Object.defineProperty(window, 'webkitSpeechRecognition', {
 });
 
 // Mock URL APIs
-global.URL.createObjectURL = jest.fn();
-global.URL.revokeObjectURL = jest.fn();
+global.URL.createObjectURL = (() => {}) as jest.Mock;
+global.URL.revokeObjectURL = (() => {}) as jest.Mock;
 
 // Mock MediaRecorder
 class MockMediaRecorder {
   start() {}
   stop() {}
-  ondataavailable = jest.fn();
-  onstop = jest.fn();
+  ondataavailable = (() => {}) as jest.Mock;
+  onstop = (() => {}) as jest.Mock;
 }
 
 window.MediaRecorder = MockMediaRecorder as any;
@@ -38,9 +38,9 @@ window.MediaRecorder = MockMediaRecorder as any;
 // Mock getUserMedia
 Object.defineProperty(global.navigator, 'mediaDevices', {
   value: {
-    getUserMedia: jest.fn().mockImplementation(() => {
+    getUserMedia: (() => {}) as jest.Mock.mockImplementation(() => {
       return Promise.resolve({
-        getTracks: () => [{stop: jest.fn()}],
+        getTracks: () => [{stop: (() => {}) as jest.Mock}],
       });
     }),
   },

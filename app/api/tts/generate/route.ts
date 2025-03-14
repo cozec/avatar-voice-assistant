@@ -5,17 +5,6 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import os from 'os';
 
-// Define type for global cache
-declare global {
-  let __audioCache: {
-    [key: string]: {
-      filepath: string;
-      timestamp: number;
-      buffer: Buffer;
-    };
-  } | undefined;
-}
-
 // Ensure we have a directory for temp files
 const TEMP_DIR = path.join(os.tmpdir(), 'avatar-tts');
 
@@ -73,12 +62,16 @@ export async function POST(request: Request) {
         // Create a new gTTS instance with improved options
         const gtts = new gTTS(text, 'en');
         
-        // Return a promise that resolves when the file is saved
-        return new Promise((resolve, reject) => {
+        // Use a Promise to handle the file operations properly
+        return new Promise<Response>((resolve) => {
           gtts.save(filepath, (err: Error | null) => {
             if (err) {
               console.error('gTTS error while saving file:', err);
-              reject(err);
+              // Reject with a Response instead of a plain error
+              resolve(NextResponse.json(
+                { error: 'Failed to generate speech with gTTS', useBrowserTTS: true, text },
+                { status: 500 }
+              ));
               return;
             }
             
@@ -90,7 +83,7 @@ export async function POST(request: Request) {
                 console.log(`Read audio file of size: ${buffer.length} bytes`);
                 
                 // Create URL to the audio file
-                const audioUrl = `/api/tts/audio/${uuid}`;
+                const audioUrl = `/api/tts/audio?uuid=${uuid}`;
                 
                 // Store the audio file path in a simple in-memory cache
                 global.__audioCache = global.__audioCache || {};
@@ -123,7 +116,10 @@ export async function POST(request: Request) {
               })
               .catch(err => {
                 console.error('Error reading audio file:', err);
-                reject(err);
+                resolve(NextResponse.json(
+                  { error: 'Failed to read audio file', useBrowserTTS: true, text },
+                  { status: 500 }
+                ));
               });
           });
         });

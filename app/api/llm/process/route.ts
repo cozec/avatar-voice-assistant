@@ -116,8 +116,9 @@ If this is a mathematical question, please solve it step by step: ${text}<end_of
       
       if (isCancelled) {
         return NextResponse.json({
-          response: "The request was cancelled.",
-          cancelled: true
+          response: "LLM stopped by user",
+          cancelled: true,
+          status: "cancelled"
         });
       }
       
