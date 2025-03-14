@@ -1,15 +1,8 @@
 // @ts-check
 
-import nextEslintPlugin from 'eslint-plugin-next';
-import nextConfig from 'eslint-config-next';
-
 /** @type {import('eslint').Linter.FlatConfig[]} */
-export default [
+module.exports = [
   {
-    plugins: {
-      next: nextEslintPlugin
-    },
-    extends: [nextConfig],
     ignores: [
       'node_modules/**',
       '.next/**',
