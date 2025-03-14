@@ -1,6 +1,6 @@
 # Voice Assistant
 
-A web-based voice assistant application that provides a voice-in, voice-out experience. This application uses speech-to-text (STT/ASR) to transcribe user speech, processes the text using Large Language Models (LLMs), and returns audio responses using text-to-speech (TTS).
+A web-based voice assistant application that provides a voice-in, voice-out experience. This application uses speech-to-text (STT/ASR) to transcribe user speech, processes the text using Large Language Models (LLMs), and returns audio responses using text-to-speech (TTS). Link to demo page.
 
 ## Features
 
