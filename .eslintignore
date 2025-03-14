@@ -1,0 +1,18 @@
+# Ignore node_modules
+node_modules/
+
+# Ignore build folders
+.next/
+out/
+dist/
+build/
+
+# Ignore test files
+*.test.ts
+*.test.tsx
+__tests__/
+jest.setup.ts
+jest.config.ts
+
+# Ignore specific problematic files
+app/components/VoiceAssistant.tsx 
