@@ -7,7 +7,7 @@ import os from 'os';
 
 // Define type for global cache
 declare global {
-  var __audioCache: {
+  let __audioCache: {
     [key: string]: {
       filepath: string;
       timestamp: number;
@@ -75,7 +75,7 @@ export async function POST(request: Request) {
         
         // Return a promise that resolves when the file is saved
         return new Promise((resolve, reject) => {
-          gtts.save(filepath, (err: any) => {
+          gtts.save(filepath, (err: Error | null) => {
             if (err) {
               console.error('gTTS error while saving file:', err);
               reject(err);

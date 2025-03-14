@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 // Define the global audio cache on the global object
 declare global {
-  var __audioCache: {
+  let __audioCache: {
     [key: string]: {
       filepath: string;
       timestamp: number;

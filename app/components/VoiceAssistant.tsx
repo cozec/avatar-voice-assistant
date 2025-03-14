@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 // Define type for the SpeechRecognition interface
 interface SpeechRecognitionEvent {
@@ -39,7 +39,6 @@ declare global {
 }
 
 const VoiceAssistant = () => {
-  const router = useRouter();
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [response, setResponse] = useState('');
@@ -65,7 +64,7 @@ const VoiceAssistant = () => {
   const restartAttemptRef = useRef<number>(0);
   const isMountedRef = useRef<boolean>(true);
   const originalPushStateRef = useRef<typeof window.history.pushState | null>(null);
-  
+
   // Define refs to avoid circular dependencies
   const processTranscriptRef = useRef<(() => Promise<void>) | null>(null);
   const startListeningRef = useRef<(() => void) | null>(null);
@@ -222,7 +221,7 @@ const VoiceAssistant = () => {
           
           // Keep the cancelled message visible for 3 seconds
           setTimeout(() => {
-            if (isMountedRef.current) {
+      if (isMountedRef.current) {
               setCancelMessage(null);
             }
           }, 3000);
@@ -359,7 +358,7 @@ const VoiceAssistant = () => {
       
       try {
         // Stop if it's running
-        recognitionRef.current.stop();
+          recognitionRef.current.stop();
       } catch (e) {
         // Ignore errors during cleanup
         console.log("Error stopping recognition during cleanup:", e);
@@ -452,7 +451,7 @@ const VoiceAssistant = () => {
     console.log("Recognition ended event");
     
     if (isListening) {
-      // If we're still supposed to be listening but recognition ended
+    // If we're still supposed to be listening but recognition ended
       // Just update the UI state - don't try to restart automatically
       setIsListening(false);
     }
@@ -524,7 +523,7 @@ const VoiceAssistant = () => {
             } catch (e) {
               console.error("Failed to start recognition:", e);
               setError(`Failed to start speech recognition: ${e instanceof Error ? e.message : String(e)}`);
-              cleanupRecognition();
+      cleanupRecognition();
             }
           }
         })
@@ -628,7 +627,7 @@ const VoiceAssistant = () => {
         setError(null);
         setTranscriptFinal(false);
         lastTranscriptRef.current = '';
-        setListeningTime(0);
+      setListeningTime(0);
         
         // Then start listening with a slight delay to ensure state is updated
         setTimeout(() => {
@@ -663,8 +662,8 @@ const VoiceAssistant = () => {
     restartAttemptRef.current = 0;
   }, [cleanupRecognition]);
   
-  // Setup audio context for visualizations
-  const setupAudioContext = async () => {
+  // Wrap setupAudioContext in useCallback
+  const setupAudioContext = useCallback(async () => {
     if (!isMountedRef.current) return;
     
     try {
@@ -679,7 +678,8 @@ const VoiceAssistant = () => {
       microphoneStreamRef.current = stream;
       
       // Set up audio context and analyser for visualization
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = new (window.AudioContext || 
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       analyserRef.current = audioContextRef.current.createAnalyser();
       analyserRef.current.fftSize = 256;
       
@@ -695,33 +695,25 @@ const VoiceAssistant = () => {
         setIsListening(false);
       }
     }
-  };
+  }, [isMountedRef, updateAudioLevel, setError, setIsListening]);
   
-  // Clean up audio context
-  const cleanupAudioContext = () => {
-    // Cancel animation frame
+  // Use useCallback for cleanupAudioContext to avoid dependency changes
+  const cleanupAudioContext = useCallback(() => {
+    if (audioContextRef.current) {
+      try {
+        if (audioContextRef.current.state !== 'closed') {
+          audioContextRef.current.close();
+        }
+      } catch (e) {
+        console.error('Error closing audio context:', e);
+      }
+      audioContextRef.current = null;
+    }
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
     }
-    
-    // Stop all tracks in the microphone stream
-    if (microphoneStreamRef.current) {
-      microphoneStreamRef.current.getTracks().forEach(track => track.stop());
-      microphoneStreamRef.current = null;
-    }
-    
-    // Close audio context
-    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-    
-    // Reset audio level
-    if (isMountedRef.current) {
-      setAudioLevel(0);
-    }
-  };
+  }, []);
   
   // Update audio level for visualization
   const updateAudioLevel = () => {
@@ -744,7 +736,7 @@ const VoiceAssistant = () => {
       animationFrameRef.current = requestAnimationFrame(updateAudioLevel);
     }
   };
-  
+
   // Toggle model between online and local
   const toggleModel = useCallback((e: React.MouseEvent) => {
     console.log("toggleModel called");
@@ -767,7 +759,7 @@ const VoiceAssistant = () => {
     return false;
   }, []);
   
-  // Set up audio context when listening starts
+  // Fix the useEffect dependencies
   useEffect(() => {
     if (isListening) {
       setupAudioContext();
@@ -831,7 +823,7 @@ const VoiceAssistant = () => {
         activityTimerRef.current = null;
       }
     };
-  }, [isListening, transcript, isProcessing]);
+  }, [isListening, transcript, isProcessing, cleanupAudioContext, setupAudioContext, listeningTime]);
   
   // Clean up on component unmount
   useEffect(() => {
@@ -872,14 +864,14 @@ const VoiceAssistant = () => {
         activityTimerRef.current = null;
       }
     };
-  }, [cleanupRecognition]);
-  
+  }, [cleanupRecognition, cleanupAudioContext, listeningTime, setupAudioContext]);
+
   // Format time for display
   const formatTime = (ms: number) => {
     const seconds = Math.floor(ms / 1000);
     return `${seconds}s`;
   };
-  
+
   // Clean up all resources for deep cleanup
   const cleanupAllResources = useCallback(() => {
     console.log("Performing deep cleanup of all resources");
@@ -942,7 +934,7 @@ const VoiceAssistant = () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
     };
   }, [cleanupAllResources]);
-  
+
   // Block all events - commented out since it's unused
   // const blockAllEvents = useCallback((e: React.SyntheticEvent) => {
   //   e.preventDefault();
@@ -961,8 +953,8 @@ const VoiceAssistant = () => {
     
     // Stop all possible default behaviors
     if (e) {
-      e.preventDefault();
-      e.stopPropagation();
+    e.preventDefault();
+    e.stopPropagation();
       e.stopImmediatePropagation();
     }
     
@@ -1005,7 +997,7 @@ const VoiceAssistant = () => {
       window.removeEventListener('popstate', handlePopState);
     };
   }, []);
-  
+
   return (
     <div 
       className="voice-isolator flex flex-col items-center w-full max-w-2xl mx-auto p-4 space-y-6"
@@ -1016,9 +1008,11 @@ const VoiceAssistant = () => {
         <div className="flex flex-col items-center space-y-6">
           {/* Einstein Avatar */}
           <div className="w-24 h-24 mb-2 overflow-hidden rounded-full border-4 border-blue-500 shadow-lg">
-            <img 
+            <Image 
               src="/einstein_avatar.jpeg" 
               alt="Einstein Avatar" 
+              width={96}
+              height={96}
               className="w-full h-full object-cover"
             />
           </div>
