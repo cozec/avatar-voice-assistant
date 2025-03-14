@@ -77,6 +77,11 @@ const VoiceAssistant = () => {
   
   const abortControllerRef = useRef<AbortController | null>(null);
   
+  // New flag to track if cancellation just happened
+  const [wasCancelled, setWasCancelled] = useState(false);
+  // Add a cancellation message state that's separate from the error state
+  const [cancelMessage, setCancelMessage] = useState<string | null>(null);
+  
   // Fix: Use an asynchronous XMLHttpRequest with navigation prevention and cancellation support
   const preventNavRequest = useCallback((url: string, body: Record<string, unknown>): Promise<Record<string, unknown>> => {
     console.log(`Making navigation-safe request to ${url}`);
@@ -146,13 +151,34 @@ const VoiceAssistant = () => {
   
   // Cancel the current inference request
   const cancelInference = useCallback(() => {
-    console.log("Cancelling inference request");
+    console.log("Cancelling inference request - button clicked");
     if (abortControllerRef.current) {
+      console.log("AbortController found - aborting request");
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
+    } else {
+      console.log("No AbortController found to cancel");
     }
+    
+    // Set flag that cancellation happened
+    setWasCancelled(true);
+    
+    // Set states in this specific order
     setIsInferencing(false);
-    setError("Inference cancelled by user");
+    setIsProcessing(false); // Also stop overall processing
+    setResponse(''); // Clear any partial response
+    setCancelMessage("LLM stopped by user"); // Changed message as requested
+    
+    // Don't set error for user-initiated cancellations
+    // setError("Inference cancelled by user");
+    
+    // Keep the cancelled message visible for 3 seconds
+    setTimeout(() => {
+      if (isMountedRef.current) {
+        setWasCancelled(false);
+        setCancelMessage(null);
+      }
+    }, 3000);
   }, []);
   
   // Process transcript function - defined early to avoid circular reference
@@ -172,6 +198,11 @@ const VoiceAssistant = () => {
     console.log("Beginning to process transcript:", transcript);
     
     try {
+      // Only clear errors if not from cancellation
+      if (!wasCancelled && error) {
+        setError(null);
+      }
+      
       setIsProcessing(true);
       
       // Step 1: Process with LLM using safe request
@@ -184,9 +215,18 @@ const VoiceAssistant = () => {
         if (!isMountedRef.current) return;
         
         // Check if the request was cancelled
-        if (llmResponse.cancelled) {
+        if (llmResponse.cancelled || llmResponse.status === "cancelled") {
           console.log("LLM request was cancelled");
           setIsProcessing(false);
+          setCancelMessage("LLM stopped by user"); // Changed message as requested
+          
+          // Keep the cancelled message visible for 3 seconds
+          setTimeout(() => {
+            if (isMountedRef.current) {
+              setCancelMessage(null);
+            }
+          }, 3000);
+          
           return;
         }
         
@@ -197,7 +237,8 @@ const VoiceAssistant = () => {
         try {
           const ttsResponse = await preventNavRequest('/api/tts/generate', {
             text: generatedResponse,
-            useBrowserTTS: true
+            useBrowserTTS: false, // Set to false to use gTTS by default
+            useGTTS: true // Explicitly enable gTTS
           });
           
           if (!isMountedRef.current) return;
@@ -205,11 +246,11 @@ const VoiceAssistant = () => {
           // Check data format from the TTS endpoint
           console.log("TTS response:", ttsResponse);
           
-          // Check if we should use browser's TTS - fix response format handling
-          if (ttsResponse.useBrowserTTS || (ttsResponse.data && ttsResponse.data.useBrowserTTS)) {
+          // Check if we should use browser's TTS
+          if (ttsResponse.useBrowserTTS) {
             // Use browser's built-in speech synthesis
             if ('speechSynthesis' in window) {
-              const textToSpeak = ttsResponse.text || (ttsResponse.data && ttsResponse.data.text) || generatedResponse;
+              const textToSpeak = ttsResponse.text || generatedResponse;
               const utterance = new SpeechSynthesisUtterance(textToSpeak);
               utterance.rate = 1.0;
               utterance.pitch = 1.0;
@@ -218,8 +259,47 @@ const VoiceAssistant = () => {
               console.error('Browser speech synthesis not supported');
               setError('Your browser does not support speech synthesis');
             }
-          } else {
-            // Use OpenAI TTS - handle both response formats
+          } 
+          // Check if gTTS was used
+          else if (ttsResponse.useGTTS && ttsResponse.audioUrl) {
+            console.log("Using gTTS with audio URL:", ttsResponse.audioUrl);
+            setAudioUrl(ttsResponse.audioUrl);
+            
+            // Play the audio with better error handling
+            if (audioRef.current) {
+              console.log("Attempting to play audio from:", ttsResponse.audioUrl);
+              audioRef.current.src = ttsResponse.audioUrl;
+              
+              // Force audio to load before playing
+              audioRef.current.load();
+              
+              // Add a small delay before playing to ensure audio is loaded
+              setTimeout(() => {
+                if (audioRef.current) {
+                  const playPromise = audioRef.current.play();
+                  
+                  if (playPromise !== undefined) {
+                    playPromise
+                      .then(() => {
+                        console.log("Audio playback started successfully");
+                      })
+                      .catch(err => {
+                        console.error("Error playing gTTS audio:", err);
+                        // Fall back to browser TTS
+                        if ('speechSynthesis' in window) {
+                          console.log("Falling back to browser TTS");
+                          window.speechSynthesis.cancel(); // Cancel any ongoing speech
+                          window.speechSynthesis.speak(new SpeechSynthesisUtterance(generatedResponse));
+                        }
+                      });
+                  }
+                }
+              }, 100);
+            }
+          }
+          // Fallback for other TTS services
+          else {
+            // Handle any other TTS services (like OpenAI TTS if it existed)
             const audioURL = ttsResponse.audioUrl || (ttsResponse.data && ttsResponse.data.audioUrl);
             if (audioURL) {
               setAudioUrl(audioURL);
@@ -260,7 +340,7 @@ const VoiceAssistant = () => {
         setIsProcessing(false);
       }
     }
-  }, [isProcessing, transcript, useLocalModel, preventNavRequest, isMountedRef]);
+  }, [isProcessing, transcript, useLocalModel, preventNavRequest, isMountedRef, wasCancelled, error]);
   
   // Store the processTranscript function in a ref
   useEffect(() => {
@@ -1087,13 +1167,23 @@ const VoiceAssistant = () => {
                   <button
                     onClick={cancelInference}
                     type="button"
-                    className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-medium rounded-md transition-colors"
+                    className="px-3 py-1 bg-red-500 hover:bg-red-600 text-white text-xs font-medium rounded-md transition-colors stop-inference-button"
                     aria-label="Stop inference"
                   >
                     Stop
                   </button>
                 )}
               </div>
+            </div>
+          )}
+          
+          {cancelMessage && (
+            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-yellow-600 shadow-sm transition-all duration-300">
+              <h3 className="font-semibold mb-2 flex items-center">
+                <span className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></span>
+                Status:
+              </h3>
+              <p>{cancelMessage}</p>
             </div>
           )}
           
@@ -1104,6 +1194,7 @@ const VoiceAssistant = () => {
                 Error:
               </h3>
               <p>{error}</p>
+              {console.log("Rendering error message:", error)}
             </div>
           )}
         </div>
@@ -1113,11 +1204,24 @@ const VoiceAssistant = () => {
         <audio 
           ref={audioRef} 
           src={audioUrl} 
-          className="hidden" 
+          controls  // Add controls for debugging
+          onPlay={() => console.log("Audio started playing")}
           onError={(e) => {
             console.error("Audio error:", e);
+            // Log more detailed error information
+            const audioElement = e.currentTarget as HTMLAudioElement;
+            console.error("Audio error code:", audioElement.error?.code);
+            console.error("Audio error message:", audioElement.error?.message);
+            console.error("Audio URL that failed:", audioUrl);
+            
             if (isMountedRef.current) {
-              setError("Failed to play audio response. Please try again.");
+              setError("Failed to play audio response. Falling back to browser TTS.");
+              
+              // Fall back to browser TTS
+              if ('speechSynthesis' in window && response) {
+                window.speechSynthesis.cancel(); // Cancel any ongoing speech
+                window.speechSynthesis.speak(new SpeechSynthesisUtterance(response));
+              }
             }
           }}
         />
@@ -1144,9 +1248,13 @@ const VoiceAssistantWrapper = () => {
     const isModelToggle = target.closest('.model-toggle-button') || 
                          target.classList.contains('model-toggle-button');
     
-    // Allow model toggle button clicks to proceed
-    if (isModelToggle) {
-      console.log("Allowing model toggle button click in preventClickPropagation");
+    // Check if this is the stop button
+    const isStopButton = target.closest('.stop-inference-button') || 
+                         target.closest('button[aria-label="Stop inference"]');
+    
+    // Allow model toggle button and stop button clicks to proceed
+    if (isModelToggle || isStopButton) {
+      console.log(`Allowing ${isStopButton ? 'stop button' : 'model toggle button'} click in preventClickPropagation`);
       return true;
     }
     
@@ -1177,15 +1285,19 @@ const VoiceAssistantWrapper = () => {
         const isModelToggle = target.closest('.model-toggle-button') || 
                              target.classList.contains('model-toggle-button');
         
-        // Allow model toggle button clicks to proceed
-        if (isModelToggle) {
-          console.log("Allowing model toggle button click");
+        // Check if this is the stop button
+        const isStopButton = target.closest('.stop-inference-button') || 
+                            target.closest('button[aria-label="Stop inference"]');
+        
+        // Allow model toggle button and stop button clicks to proceed
+        if (isModelToggle || isStopButton) {
+          console.log(`Allowing ${isStopButton ? 'stop button' : 'model toggle button'} click`);
           return true;
         }
         
         // If it's any form of navigation element, prevent it
         if (target.tagName === 'A' || target.closest('a') || 
-            target.tagName === 'BUTTON' || target.closest('button') ||
+            (target.tagName === 'BUTTON' && !isStopButton) || (target.closest('button') && !isStopButton) ||
             target.tagName === 'INPUT' && (target as HTMLInputElement).type === 'submit') {
           console.log("Preventing potential navigation from click:", target.tagName);
           e.preventDefault();
@@ -1215,9 +1327,13 @@ const VoiceAssistantWrapper = () => {
         const isModelToggle = target.closest('.model-toggle-button') || 
                              target.classList.contains('model-toggle-button');
         
-        // Allow model toggle button clicks to proceed
-        if (isModelToggle) {
-          console.log("Allowing model toggle button click in onMouseDown");
+        // Check if this is the stop button
+        const isStopButton = target.closest('.stop-inference-button') || 
+                            target.closest('button[aria-label="Stop inference"]');
+        
+        // Allow model toggle button and stop button clicks to proceed
+        if (isModelToggle || isStopButton) {
+          console.log(`Allowing ${isStopButton ? 'stop button' : 'model toggle button'} click in onMouseDown`);
           return true;
         }
         
